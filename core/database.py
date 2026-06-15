@@ -17,10 +17,11 @@ engine = create_async_engine(settings.database_url, echo=False, pool_size=5, max
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
-@event.listens_for(engine.sync_engine, "connect")
-def _register_pgvector(dbapi_connection: Any, connection_record: Any) -> None:
+async def register_pgvector_codec() -> None:
     """Register the pgvector type codec so VECTOR columns return Python lists."""
-    register_vector(dbapi_connection)
+    async with engine.connect() as conn:
+        raw = await conn.get_raw_connection()
+        await register_vector(raw.driver_connection)
 
 
 async def verify_db_connection() -> bool:

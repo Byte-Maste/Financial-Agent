@@ -5,7 +5,7 @@ from datetime import date
 
 class Transaction(BaseModel):
     transaction_id: str = Field(..., description="Unique hash from date, amount, and raw_merchant")
-    user_id: str = Field(..., description="UUID of the owning user")
+    user_id: str = Field(..., description="Owning user identifier (string ID)")
     transaction_date: date = Field(..., description="Calendar date the transaction was settled")
     amount: float = Field(..., gt=0, description="Absolute transaction value in local currency")
     merchant: str = Field(..., description="Cleaned merchant entity name")

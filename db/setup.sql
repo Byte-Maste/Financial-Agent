@@ -24,7 +24,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- 1. Users
 CREATE TABLE users (
-    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT PRIMARY KEY,
     current_balance DECIMAL(12,2) NOT NULL DEFAULT 0,
     monthly_income DECIMAL(12,2) NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -33,7 +33,7 @@ CREATE TABLE users (
 -- 2. Transactions
 CREATE TABLE transactions (
     transaction_id TEXT PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     date DATE NOT NULL,
     amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
     merchant TEXT NOT NULL,
@@ -60,8 +60,5 @@ CREATE TABLE merchant_embeddings (
 -- Seed data
 -- =============================================================
 
-INSERT INTO users (current_balance, monthly_income)
-VALUES (50000, 75000);
-
--- Print the generated UUID for reference
-SELECT user_id AS test_user_id FROM users LIMIT 1;
+INSERT INTO users (user_id, current_balance, monthly_income)
+VALUES ('4616', 50000, 75000);
