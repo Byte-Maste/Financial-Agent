@@ -1,8 +1,6 @@
 import time
-from typing import Any
 
-from pgvector.asyncpg import register_vector
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession
 
 from core.config import settings
@@ -15,13 +13,6 @@ _sanitized_url = (
 
 engine = create_async_engine(settings.database_url, echo=False, pool_size=5, max_overflow=10)
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-
-async def register_pgvector_codec() -> None:
-    """Register the pgvector type codec so VECTOR columns return Python lists."""
-    async with engine.connect() as conn:
-        raw = await conn.get_raw_connection()
-        await register_vector(raw.driver_connection)
 
 
 async def verify_db_connection() -> bool:

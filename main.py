@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage
 from api.v1 import ingestion, chat, advisor
 from agents.orchestrator import compiled_graph
 from core.config import settings
-from core.database import register_pgvector_codec, verify_db_connection
+from core.database import verify_db_connection
 from core.logger import logger
 
 
@@ -18,9 +18,6 @@ async def lifespan(app: FastAPI):
     db_ok = await verify_db_connection()
     if not db_ok:
         logger.warning("Server started without database — most endpoints will fail")
-    else:
-        await register_pgvector_codec()
-        logger.info("pgvector codec registered for VECTOR column support")
     yield
     logger.info("Shutting down Financial Wellness Agent server")
 

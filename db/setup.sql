@@ -15,9 +15,6 @@ CREATE DATABASE financial_agent;
 -- Connect to it
 \c financial_agent
 
--- Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
-
 -- =============================================================
 -- Tables
 -- =============================================================
@@ -47,12 +44,12 @@ CREATE INDEX idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX idx_transactions_date ON transactions(date);
 CREATE INDEX idx_transactions_category ON transactions(category);
 
--- 3. Merchant embeddings (pgvector)
+-- 3. Merchant embeddings (JSONB — no pgvector dependency)
 --    voyage-3-lite produces 512-dimensional vectors
 CREATE TABLE merchant_embeddings (
     merchant_name TEXT PRIMARY KEY,
     category TEXT NOT NULL,
-    embedding VECTOR(512) NOT NULL,
+    embedding JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
