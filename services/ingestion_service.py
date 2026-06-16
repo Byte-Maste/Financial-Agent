@@ -21,14 +21,15 @@ async def insert_transactions(
         await session.execute(
             text(
                 "INSERT INTO transactions (transaction_id, user_id, date, amount, "
-                "merchant, raw_merchant, category, payment_mode) "
-                "VALUES (:tid, :uid, :date, :amount, :merchant, :raw, :cat, :pm)"
+                "transaction_type, merchant, raw_merchant, category, payment_mode) "
+                "VALUES (:tid, :uid, :date, :amount, :tt, :merchant, :raw, :cat, :pm)"
             ),
             {
                 "tid": txn.transaction_id,
                 "uid": user_id,
-                "date": txn.transaction_date.isoformat(),
+                "date": txn.transaction_date,
                 "amount": txn.amount,
+                "tt": txn.transaction_type,
                 "merchant": txn.merchant,
                 "raw": txn.raw_merchant,
                 "cat": txn.category,

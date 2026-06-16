@@ -19,7 +19,7 @@ def compute_health_score(
 ) -> AnalyticsReport:
     savings_rate = (total_income - total_expenses) / total_income if total_income > 0 else 0
     debt_to_income = debt_payments / total_income if total_income > 0 else 0
-    spending_array = np.array(monthly_spending) if monthly_spending else np.array([0])
+    spending_array = np.array([float(x) for x in monthly_spending]) if monthly_spending else np.array([0.0])
     spending_variance = 1 - (float(np.std(spending_array)) / float(np.mean(spending_array) + 1e-8))
     emergency_fund_months = current_balance / avg_monthly_expenses if avg_monthly_expenses > 0 else 0
     emergency_score = min(1, emergency_fund_months / 6)

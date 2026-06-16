@@ -25,7 +25,7 @@ async def forecast_agent(state: AgentState) -> dict:
 
         txn_rows = await session.execute(
             text(
-                "SELECT date, amount, merchant, category FROM transactions "
+                "SELECT date, amount, transaction_type, merchant, category FROM transactions "
                 "WHERE user_id = :uid ORDER BY date ASC"
             ),
             {"uid": user_id},
@@ -39,10 +39,13 @@ async def forecast_agent(state: AgentState) -> dict:
             "extracted_payload": {},
         }
 
-    df = pd.DataFrame(data, columns=["date", "amount", "merchant", "category"])
-    subs = detect_recurring_charges(df)
-    inactive = flag_inactive_subscriptions(subs, df)
-    forecast = forecast_cash_flow(current_balance, df)
+    df = pd.DataFrame(data, columns=["date", "amount", "transaction_type", "merchant", "category"])
+    expense_df = df[df["transaction_type"] == "debit"]
+    subs = detect_recurring_charges(expense_df)
+    inactive = flag_inactive_subscriptions(subs, expense_df)
+    bill_df = expense_df[expense_df["category"] == "Bills"]
+    fixed_commitments = bill_df["amount"].tolist() if not bill_df.empty else []
+    forecast = forecast_cash_flow(current_balance, expense_df, fixed_commitments=fixed_commitments)
 
     elapsed = time.time() - start
     logger.info(

@@ -9,6 +9,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_groq.chat_models import _convert_dict_to_message, _convert_message_to_dict
 
 from core.config import settings
+from core.llm_logger import log_llm_call
 from core.logger import logger
 
 
@@ -72,7 +73,9 @@ class FallbackLLM(BaseChatModel):
                 messages=message_dicts, **params
             )
             elapsed = time.time() - start
-            logger.info(f"LLM invoked | provider=groq | model={self.model} | took={elapsed:.2f}s")
+            response_text = response.choices[0].message.content if response.choices else ""
+            log_path = log_llm_call(message_dicts, response_text, self.model)
+            logger.info(f"LLM invoked | provider=groq | model={self.model} | took={elapsed:.2f}s | log={log_path}")
 
             response_dict = response.model_dump() if hasattr(response, "model_dump") else dict(response)
             generations = []

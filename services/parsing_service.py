@@ -67,19 +67,24 @@ def parse_csv(file: BinaryIO, user_id: str) -> list[Transaction]:
     for _, row in df.iterrows():
         row_dict = row.to_dict()
         parsed_date = pd.to_datetime(row_dict.get("date")).date()
+        raw_amt = float(row_dict.get("amount", 0))
+        txn_type = str(row_dict.get("transaction_type", "debit"))
+        if txn_type not in ("credit", "debit"):
+            txn_type = "credit" if raw_amt >= 0 else "debit"
         txn = Transaction(
             transaction_id=_generate_transaction_id(
                 parsed_date,
-                float(row_dict.get("amount", 0)),
+                abs(raw_amt),
                 str(row_dict.get("merchant", "")),
             ),
             user_id=user_id,
             transaction_date=parsed_date,
-            amount=float(row_dict.get("amount", 0)),
+            amount=abs(raw_amt),
             merchant=str(row_dict.get("merchant", "")),
             raw_merchant=str(row_dict.get("merchant", "")),
             category=str(row_dict.get("category", "Uncategorized")),
             payment_mode=str(row_dict.get("payment_mode", "UPI")),
+            transaction_type=txn_type,
         )
         transactions.append(txn)
     logger.info(f"CSV parsing complete | user_id={user_id} | total={len(transactions)}")
@@ -166,6 +171,7 @@ def _try_build_transaction(date_str: str, amount_str: str, merchant_str: str, us
 
         amount = float(amount_str.replace(",", "").replace("₹", "").replace("$", "").replace("Rs.", "").strip())
         merchant = merchant_str.strip().rstrip(".")
+        transaction_type = "credit" if "CR" in merchant.upper() else "debit"
 
         return Transaction(
             transaction_id=_generate_transaction_id(txn_date, amount, merchant),
@@ -174,6 +180,7 @@ def _try_build_transaction(date_str: str, amount_str: str, merchant_str: str, us
             amount=amount,
             merchant=merchant,
             raw_merchant=merchant,
+            transaction_type=transaction_type,
         )
     except (ValueError, IndexError, TypeError):
         return None
@@ -197,9 +204,11 @@ async def parse_pdf_with_llm(raw_text_by_page: dict[int, str], user_id: str) -> 
     llm = FallbackLLM()
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a bank statement parser. Extract all transactions from the text below. "
+        ("system", "You are a bank statement parser. Extract ALL transactions from the text below. "
          "Return a JSON array of objects with fields: transaction_date (YYYY-MM-DD), "
-         "amount (float), merchant (string), raw_merchant (string), category (string, "
+         "amount (float, always positive), merchant (string), raw_merchant (string), "
+         "transaction_type (string, 'credit' for deposits/refunds, 'debit' for withdrawals/payments), "
+         "category (string, "
          "one of: Food, Transport, Shopping, Bills, Entertainment, Healthcare, Education, Income, Uncategorized), "
          "payment_mode (string, one of: UPI, Card, NEFT, Cash, Cheque, Unknown). "
          "Return ONLY valid JSON, no markdown, no explanation."),
@@ -207,20 +216,26 @@ async def parse_pdf_with_llm(raw_text_by_page: dict[int, str], user_id: str) -> 
     ])
 
     try:
-        formatted_messages = prompt.format_messages(text=all_text[:8000])
+        max_chars = 50000
+        truncated = all_text[:max_chars]
+        formatted_messages = prompt.format_messages(text=truncated)
         logger.debug(f"LLM prompt (first 1000 chars): {str(formatted_messages)[:1000]}")
         response = await llm.ainvoke(formatted_messages)
         content = response.content.strip()
         logger.debug(f"LLM raw response (first 500 chars): {content[:500]}")
-        # Handle safety rejections from free models
-        if "User Safety" in content or "unsafe" in content.lower() or "PII" in content:
-            logger.warning(f"LLM safety rejection: {content[:200]}")
-            return []
         # Strip markdown code fences if present
         if content.startswith("```"):
             content = re.sub(r"^```(?:json)?\s*", "", content)
             content = re.sub(r"\s*```$", "", content)
-        data = json.loads(content)
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            # JSON parsing failed — check for safety rejection
+            if "User Safety" in content or "unsafe" in content.lower():
+                logger.warning(f"LLM safety rejection: {content[:200]}")
+            else:
+                logger.error(f"LLM returned non-JSON: {content[:200]}")
+            return []
         if isinstance(data, dict):
             data = data.get("transactions", data.get("data", []))
     except Exception as e:
@@ -231,18 +246,22 @@ async def parse_pdf_with_llm(raw_text_by_page: dict[int, str], user_id: str) -> 
     for item in data:
         try:
             txn_date = date.fromisoformat(item["transaction_date"])
-            amount = float(item["amount"])
+            raw_amount = float(item["amount"])
+            transaction_type = str(item.get("transaction_type", ""))
+            if transaction_type not in ("credit", "debit"):
+                transaction_type = "credit" if raw_amount < 0 else "debit"
             merchant = str(item.get("merchant", "Unknown"))
             raw_merchant = str(item.get("raw_merchant", merchant))
             txn = Transaction(
-                transaction_id=_generate_transaction_id(txn_date, amount, raw_merchant),
+                transaction_id=_generate_transaction_id(txn_date, abs(raw_amount), raw_merchant),
                 user_id=user_id,
                 transaction_date=txn_date,
-                amount=amount,
+                amount=abs(raw_amount),
                 merchant=merchant,
                 raw_merchant=raw_merchant,
                 category=item.get("category", "Uncategorized"),
                 payment_mode=item.get("payment_mode", "Unknown"),
+                transaction_type=transaction_type,
             )
             transactions.append(txn)
         except (ValueError, KeyError, TypeError) as e:

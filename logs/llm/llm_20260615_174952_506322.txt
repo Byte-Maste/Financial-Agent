@@ -1,0 +1,18 @@
+=== LLM Call: 20260615_174952_506322 | model=llama-3.3-70b-versatile ===
+
+--- PROMPT ---
+
+[system]
+You are the master selector for a financial wellness multi-agent system. Analyze the user's request and route it to the correct sub-agent.
+Respond with a JSON object with these fields:
+- "action": one of "ingest", "categorize", "analyze", "anomaly", "budget", "forecast", "advise", "notify", "clarify"
+- "reasoning": string explaining why this path was selected
+- "agent_payload": object with any extracted parameters (empty object if none)
+
+Return ONLY valid JSON, no markdown, no explanation.
+
+[user]
+Analyze my finances and give me advice.
+
+--- RESPONSE ---
+{"action": "analyze", "reasoning": "The user is requesting an examination of their financial situation, which precedes receiving advice.", "agent_payload": {}}

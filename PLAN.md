@@ -1,8 +1,9 @@
 # Implementation Plan: Autonomous Financial Wellness Agent
 
 ## Target Stack
-- **Backend:** Python 3.13+, FastAPI, LangChain + LangGraph, SQLAlchemy (async), PostgreSQL + pgvector
-- **LLM:** Gemini API — `gemini-2.0-flash` (routing/advice), `text-embedding-004` (768-dim embeddings)
+- **Backend:** Python 3.13+, FastAPI, LangChain + LangGraph, SQLAlchemy (async), PostgreSQL
+- **LLM:** Groq API — `llama-3.3-70b-versatile` via raw `groq.Groq` SDK
+- **Embeddings:** Voyage AI — `voyage-3-lite` (512-dim), stored as JSONB
 - **Frontend:** React + Vite + TypeScript + Tailwind CSS
 - **Validation:** Pydantic (backend), Zod (frontend)
 
@@ -16,31 +17,36 @@ financial_agentic_system/
 │   ├── analysis_agent.py
 │   ├── anomaly_agent.py
 │   ├── forecast_agent.py
+│   ├── budget_agent.py
 │   └── advisor_agent.py
 ├── api/v1/
-│   ├── ingestion.py         # POST /api/v1/ingest
-│   ├── chat.py              # WS /api/v1/ws (streams graph)
+│   ├── ingestion.py         # POST /api/v1/ingest (full pipeline)
+│   ├── chat.py              # POST /chat (orchestrator)
 │   └── advisor.py           # GET /api/v1/advice/{user_id}
 ├── core/
-│   ├── config.py            # pydantic-settings
+│   ├── config.py            # pydantic-settings (groq + voyage)
 │   ├── database.py          # async engine + sessions
-│   └── deps.py              # DI helpers
-├── db/migrations/
-│   ├── 001_schema.sql       # users + transactions tables
-│   └── 002_pgvector.sql     # merchant_embeddings + HNSW index
+│   ├── deps.py              # DI helpers
+│   └── llm_logger.py        # Prompt/response dump to logs/llm/
+├── db/
+│   ├── setup.sql            # Local DB bootstrap (3 tables)
+│   └── supabase_setup.sql   # Supabase variant
 ├── schemas/
-│   ├── models.py            # Transaction, UserState, IngestionResult
+│   ├── models.py            # Transaction (with transaction_type), AnalyticsReport, etc.
 │   ├── state.py             # AgentState TypedDict
 │   └── routing.py           # OrchestratorRoutingContract
 ├── services/
-│   ├── parsing_service.py   # PDF (pdfplumber), CSV (pandas), UPI text (Gemini structured)
+│   ├── parsing_service.py   # PDF (pdfplumber), CSV (pandas), UPI text (Groq structured)
 │   ├── ingestion_service.py # SHA256 dedup + batch DB insert
-│   ├── embedding_service.py # text-embedding-004 -> pgvector upsert
-│   ├── category_service.py  # cosine >85% -> reuse; else -> Gemini classification
+│   ├── embedding_service.py # Voyage AI -> JSONB
+│   ├── category_service.py  # Cosine > 0.75 -> reuse; else -> Groq classification
 │   ├── analytics.py         # FHS formula: 30*Sr + 20*(1-Dr) + 20*Cs + 30*min(1,EF/6)
-│   ├── anomaly_service.py   # Rolling Z-score (90d) + 60s duplicate detection
+│   ├── anomaly_service.py   # Rolling Z-score + 60s duplicate detection
 │   ├── forecaster.py        # 30-day cash flow projection
-│   └── subscription_service.py # Recurring charge detection + inactivity flags
+│   ├── subscription_service.py # Recurring charge detection + inactivity flags
+│   ├── notification_service.py # Build alerts from anomalies + forecast
+│   └── llm_service.py       # FallbackLLM wrapping raw groq.AsyncGroq
+├── logs/llm/                # Auto-created; full prompt/response dumps
 ├── frontend/
 ├── tests/
 ├── main.py                  # FastAPI entrypoint
@@ -50,28 +56,17 @@ financial_agentic_system/
 └── PLAN.md
 ```
 
-## Phases
+## Key Fixes Applied
 
-| Phase | What | Key Files |
-|-------|------|-----------|
-| 1 | Scaffold + venv + deps | `requirements.txt`, `.venv/` |
-| 2 | Core config + DB + schemas | `core/config.py`, `core/database.py`, `schemas/*` |
-| 3 | DB migrations | `db/migrations/001_schema.sql`, `002_pgvector.sql` |
-| 4 | Ingestion pipeline | `services/parsing_service.py`, `ingestion_service.py`, `api/v1/ingestion.py`, `agents/ingestion_agent.py` |
-| 5 | Master Orchestrator | `agents/orchestrator.py`, `schemas/state.py`, `schemas/routing.py` |
-| 6 | Categorization Engine | `services/embedding_service.py`, `category_service.py`, `agents/categorization_agent.py` |
-| 7 | Analytics + Anomaly | `services/analytics.py`, `anomaly_service.py`, `agents/analysis_agent.py`, `anomaly_agent.py` |
-| 8 | Forecast + Subs | `services/forecaster.py`, `subscription_service.py`, `agents/forecast_agent.py` |
-| 9 | Advisor + WS | `agents/advisor_agent.py`, `services/notification_service.py`, `api/v1/chat.py` |
-| 10 | Frontend | React + Vite + Tailwind scaffold |
-| 11 | Tests | `tests/conftest.py`, `tests/test_*.py` |
-
-## Design Rules (from CONTRIBUTING.md)
-
-| Rule | Enforcement |
-|------|-------------|
-| **1. No Swiss-Army Agents** | `master_selector` -> conditional edges -> single worker per turn. Workers never call workers. |
-| **2. Strict Data Contracts** | All LLM output via `with_structured_output(PydanticModel)`. Validation errors caught. |
-| **3. Lean Context Windows** | Aggregates in pandas/numpy first. Only summary reports passed to LLM. |
-| **4. Async Everything** | FastAPI routes async. DB via `asyncpg` + `AsyncSession`. |
-| **5. Gemini API** | `ChatGoogleGenerativeAI(model="gemini-2.0-flash")`, `text-embedding-004` (768-dim). |
+| Issue | Fix |
+|-------|-----|
+| Savings rate always zero | `analysis_agent.py` now filters by `transaction_type` (credit vs debit) |
+| `users.monthly_income` never read | `analysis_agent.py` queries it; passed to `compute_health_score` |
+| `current_balance=0` hardcoded | `analysis_agent.py` now queries real balance from `users` table |
+| No income/expense distinction | Added `transaction_type` column to schema + `Transaction` model |
+| `anomaly_agent.py` orphaned | Added to orchestrator graph + routing (`action: "anomaly"`) |
+| `notification_service.py` disconnected | Wired into `ingestion.py` pipeline + orchestrator `notify` node |
+| No Budget Management Agent | Created `agents/budget_agent.py` with 50/30/20 rule |
+| `requirements.txt` had wrong deps | Removed `langchain-google-genai`, `google-generativeai`, `langchain-ollama`, `pgvector`; added `groq`, `langchain-groq`, `voyageai` |
+| `.env.example` outdated | Updated to `GROQ_API_KEY` + `VOYAGE_API_KEY` |
+| `PLAN.md` referenced Gemini | Updated to Groq + Voyage |

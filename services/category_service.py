@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import text
@@ -57,9 +59,9 @@ async def _upsert_merchant_embedding(
         {
             "name": merchant_name,
             "cat": category,
-            "emb": embedding,
+            "emb": json.dumps(embedding),
             "cat2": category,
-            "emb2": embedding,
+            "emb2": json.dumps(embedding),
         },
     )
     await session.commit()
@@ -77,12 +79,14 @@ async def classify_with_llm(merchant_name: str) -> str:
 
 
 async def categorize_transaction(
-    session: AsyncSession, transaction_id: str, merchant_name: str
+    session: AsyncSession, transaction_id: str, merchant_name: str,
+    embedding: list[float] | None = None,
 ) -> str:
-    try:
-        embedding = get_embedding(merchant_name)
-    except RuntimeError:
-        embedding = None
+    if embedding is None:
+        try:
+            embedding = get_embedding(merchant_name)
+        except RuntimeError:
+            embedding = None
 
     if embedding:
         similar = await _find_similar_merchant(session, embedding)

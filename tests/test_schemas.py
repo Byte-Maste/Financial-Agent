@@ -15,20 +15,17 @@ def test_transaction_default_category():
     assert txn.payment_mode == "UPI"
 
 
-def test_transaction_validates_positive_amount():
-    import pydantic
-    try:
-        Transaction(
-            transaction_id="abc",
-            user_id="u1",
-            transaction_date=date.today(),
-            amount=-100,
-            merchant="Test",
-            raw_merchant="test",
-        )
-        assert False, "Should have raised"
-    except pydantic.ValidationError:
-        pass
+def test_transaction_default_type():
+    txn = Transaction(
+        transaction_id="abc",
+        user_id="u1",
+        transaction_date=date.today(),
+        amount=100,
+        merchant="Test",
+        raw_merchant="test",
+    )
+    assert txn.transaction_type == "debit"
+    assert txn.amount == 100
 
 
 def test_routing_contract():

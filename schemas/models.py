@@ -7,7 +7,7 @@ class Transaction(BaseModel):
     transaction_id: str = Field(..., description="Unique hash from date, amount, and raw_merchant")
     user_id: str = Field(..., description="Owning user identifier (string ID)")
     transaction_date: date = Field(..., description="Calendar date the transaction was settled")
-    amount: float = Field(..., gt=0, description="Absolute transaction value in local currency")
+    amount: float = Field(..., description="Absolute transaction value in local currency")
     merchant: str = Field(..., description="Cleaned merchant entity name")
     raw_merchant: str = Field(..., description="Unparsed merchant identifier from source ledger")
     category: Literal[
@@ -15,6 +15,7 @@ class Transaction(BaseModel):
         "Education", "Investments", "Subscriptions", "Uncategorized"
     ] = "Uncategorized"
     payment_mode: Literal["UPI", "Credit Card", "Debit Card", "Net Banking"] = "UPI"
+    transaction_type: Literal["debit", "credit"] = "debit"
 
 
 class UserState(BaseModel):
