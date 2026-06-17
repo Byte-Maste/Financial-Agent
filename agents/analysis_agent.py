@@ -10,6 +10,7 @@ from schemas.state import AgentState
 from services.analytics import (
     compute_health_score,
     compute_monthly_breakdown,
+    detect_category_trends,
 )
 from services.anomaly_service import detect_duplicates, detect_outliers
 
@@ -65,6 +66,7 @@ async def analysis_agent(state: AgentState) -> dict:
 
     outliers = detect_outliers(expense_df)
     duplicates = detect_duplicates(df)
+    category_trends = detect_category_trends(expense_df)
 
     elapsed = time.time() - start
     logger.info(
@@ -74,23 +76,35 @@ async def analysis_agent(state: AgentState) -> dict:
         f"emergency_fund={report.emergency_fund_months:.1f}m | "
         f"income=₹{total_income:,.2f} | expenses=₹{total_expenses:,.2f} | "
         f"outliers={len(outliers)} | duplicates={len(duplicates)} | "
+        f"trends={len(category_trends)} | "
         f"txn_count={len(df)} | took={elapsed:.2f}s"
     )
 
-    summary = (
-        f"Financial Health Score: {report.financial_health_score}/100. "
-        f"Savings rate: {report.savings_rate:.1%}. "
-        f"Emergency fund: {report.emergency_fund_months:.1f} months. "
-        f"Total income: ₹{total_income:,.2f}. "
-        f"Total expenses: ₹{total_expenses:,.2f}. "
-        f"Outliers detected: {len(outliers)}. "
-        f"Duplicate charges: {len(duplicates)}."
-    )
+    summary_parts = [
+        f"Financial Health Score: {report.financial_health_score}/100.",
+        f"Savings rate: {report.savings_rate:.1%}.",
+        f"Emergency fund: {report.emergency_fund_months:.1f} months.",
+        f"Total income: ₹{total_income:,.2f}.",
+        f"Total expenses: ₹{total_expenses:,.2f}.",
+        f"Outliers detected: {len(outliers)}.",
+        f"Duplicate charges: {len(duplicates)}.",
+    ]
+    for t in category_trends:
+        if t["trend"] == "increasing":
+            summary_parts.append(
+                f"{t['category']} spending increased {t['pct_change']:.0f}% this month."
+            )
+        elif t["trend"] == "decreasing":
+            summary_parts.append(
+                f"{t['category']} spending decreased {abs(t['pct_change']):.0f}% this month."
+            )
+    summary = " ".join(summary_parts)
     return {
         "messages": [AIMessage(content=summary)],
         "extracted_payload": {
             "analytics": report.model_dump(),
             "outliers": outliers,
             "duplicates": duplicates,
+            "category_trends": category_trends,
         },
     }

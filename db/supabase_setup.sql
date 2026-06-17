@@ -42,6 +42,33 @@ CREATE TABLE merchant_embeddings (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 4. Seed a test user
+-- 5. Financial Goals
+CREATE TABLE goals (
+    goal_id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    target_amount DECIMAL(12,2) NOT NULL,
+    target_date DATE NOT NULL,
+    current_progress DECIMAL(12,2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_goals_user_id ON goals(user_id);
+
+-- 6. Alerts table
+CREATE TABLE alerts (
+    alert_id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_alerts_user_id ON alerts(user_id);
+CREATE INDEX idx_alerts_created_at ON alerts(created_at);
+
+-- 5. Seed a test user
 INSERT INTO users (user_id, current_balance, monthly_income)
 VALUES ('4616', 50000, 75000);

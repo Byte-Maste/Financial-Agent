@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Literal
-from datetime import date
+from datetime import date, datetime
 
 
 class Transaction(BaseModel):
@@ -43,18 +43,22 @@ class AnalyticsReport(BaseModel):
     monthly_breakdown: dict[str, float]
 
 
-class AnomalyReport(BaseModel):
+class Alert(BaseModel):
+    alert_id: int | None = None
     user_id: str
-    outliers: list[dict]
-    duplicates: list[dict]
+    type: str
+    severity: str
+    message: str
+    is_read: bool = False
 
 
-class ForecastReport(BaseModel):
+class FinancialGoal(BaseModel):
+    goal_id: int | None = None
     user_id: str
-    current_balance: float
-    projected_balance_day_30: float
-    daily_run_rate: float
-    fixed_commitments: list[dict]
-    subscriptions: list[dict]
-    cash_cliff_alert: bool
-    daily_balance: list[float]
+    name: str
+    target_amount: float
+    target_date: date
+    current_progress: float = 0.0
+
+
+

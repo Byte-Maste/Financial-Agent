@@ -19,6 +19,26 @@ export async function getAdvice(userId: string) {
   return res.json()
 }
 
+export async function getDashboard(userId: string) {
+  const res = await fetch(`${API_BASE}/dashboard/${userId}`)
+  if (!res.ok) throw new Error(`Dashboard fetch failed (${res.status})`)
+  return res.json()
+}
+
+export async function getAlerts(userId: string) {
+  const res = await fetch(`${API_BASE}/alerts/${userId}`)
+  if (!res.ok) throw new Error(`Alerts fetch failed (${res.status})`)
+  return res.json()
+}
+
+export async function markAlertsRead(userId: string, alertIds: number[]) {
+  await fetch(`${API_BASE}/alerts/${userId}/mark-read`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alert_ids: alertIds }),
+  })
+}
+
 export function createChatSocket(): WebSocket {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   return new WebSocket(`${proto}://${location.host}/api/v1/ws`)

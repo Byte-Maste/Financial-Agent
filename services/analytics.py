@@ -54,3 +54,37 @@ def compute_monthly_breakdown(
 
 def compute_category_breakdown(df: pd.DataFrame) -> dict[str, float]:
     return df.groupby("category")["amount"].sum().to_dict()
+
+
+def detect_category_trends(df: pd.DataFrame, threshold_pct: float = 15.0) -> list[dict]:
+    if df.empty:
+        return []
+    df = df.copy()
+    df["month"] = pd.to_datetime(df["date"]).dt.to_period("M").astype(str)
+    monthly = df.groupby(["month", "category"])["amount"].sum().reset_index()
+    trends: list[dict] = []
+    for category in monthly["category"].unique():
+        cat_df = monthly[monthly["category"] == category].sort_values("month")
+        if len(cat_df) < 2:
+            continue
+        current = cat_df.iloc[-1]
+        prior = cat_df.iloc[:-1]
+        current_total = float(current["amount"])
+        previous_avg = float(prior["amount"].mean())
+        if previous_avg == 0:
+            continue
+        pct_change = (current_total - previous_avg) / previous_avg * 100
+        if pct_change > threshold_pct:
+            trend = "increasing"
+        elif pct_change < -threshold_pct:
+            trend = "decreasing"
+        else:
+            trend = "stable"
+        trends.append({
+            "category": category,
+            "current_month_total": round(current_total, 2),
+            "previous_avg": round(previous_avg, 2),
+            "pct_change": round(pct_change, 1),
+            "trend": trend,
+        })
+    return trends

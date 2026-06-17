@@ -5,11 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
 
-from api.v1 import ingestion, chat, advisor
+from api.v1 import alerts, dashboard, ingestion, chat, advisor, simulation
 from agents.orchestrator import compiled_graph
 from core.config import settings
 from core.database import verify_db_connection
 from core.logger import logger
+from core.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
@@ -18,7 +19,9 @@ async def lifespan(app: FastAPI):
     db_ok = await verify_db_connection()
     if not db_ok:
         logger.warning("Server started without database — most endpoints will fail")
+    start_scheduler()
     yield
+    stop_scheduler()
     logger.info("Shutting down Financial Wellness Agent server")
 
 
@@ -39,6 +42,9 @@ app.add_middleware(
 app.include_router(ingestion.router)
 app.include_router(chat.router)
 app.include_router(advisor.router)
+app.include_router(alerts.router)
+app.include_router(dashboard.router)
+app.include_router(simulation.router)
 
 
 @app.get("/health")

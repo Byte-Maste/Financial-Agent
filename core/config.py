@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     voyage_api_key: str = ""
     llm_model: str = "llama-3.3-70b-versatile"
     embedding_model: str = "voyage-3-lite"
+    monitoring_interval_hours: int = 6
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -5,28 +5,16 @@ from langchain_core.messages import AIMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.advisor_agent import advisor_agent
-from agents.analysis_agent import analysis_agent
-from agents.anomaly_agent import anomaly_agent
 from agents.categorization_agent import categorization_agent
-from agents.forecast_agent import forecast_agent
 from core.deps import get_db
 from core.logger import logger
 from schemas.models import IngestionResult
 from schemas.state import AgentState
 from services.ingestion_service import insert_transactions
-from services.notification_service import build_alerts
 from services.parsing_service import parse_csv, parse_pdf, parse_pdf_with_llm, parse_upi_text, PDFPasswordError
+from services.pipeline_service import run_full_pipeline
 
 router = APIRouter(prefix="/api/v1", tags=["ingestion"])
-
-
-def _make_state(user_id: str) -> AgentState:
-    return AgentState(
-        messages=[AIMessage(content="")],
-        user_id=user_id,
-        active_route="",
-        extracted_payload={},
-    )
 
 
 @router.post("/ingest")
@@ -64,38 +52,30 @@ async def ingest_file(
     ingest_result = await insert_transactions(db, user_id, transactions)
 
     pipeline_results: dict[str, object] = {}
-    state = _make_state(user_id)
+    state = AgentState(
+        messages=[AIMessage(content="")],
+        user_id=user_id,
+        active_route="",
+        extracted_payload={},
+    )
 
     if ingest_result.records_inserted > 0:
-        logger.info("Starting post-ingestion pipeline: categorize → analyze → anomaly → forecast → advise")
+        logger.info("Starting post-ingestion pipeline: categorize → analyze → anomaly → forecast → budget → advise")
 
         cat = await categorization_agent(state)
         pipeline_results["categorization"] = cat.get("extracted_payload", {})
 
-        ana = await analysis_agent(state)
-        pipeline_results["analysis"] = ana.get("extracted_payload", {})
-        state["extracted_payload"] = pipeline_results["analysis"]
+        payload = await run_full_pipeline(user_id)
+        pipeline_results["analysis"] = payload.get("analytics", {})
+        pipeline_results["anomaly"] = {"outliers": payload.get("outliers", []), "duplicates": payload.get("duplicates", [])}
+        pipeline_results["forecast"] = payload.get("forecast", {})
+        pipeline_results["alerts"] = payload.get("alerts", [])
 
-        ano = await anomaly_agent(state)
-        pipeline_results["anomaly"] = ano.get("extracted_payload", {})
-        state["extracted_payload"].update(pipeline_results["anomaly"])
-
-        fct = await forecast_agent(state)
-        pipeline_results["forecast"] = fct.get("extracted_payload", {})
-        state["extracted_payload"].update(pipeline_results["forecast"])
-
+        state["extracted_payload"] = payload
         adv = await advisor_agent(state)
         pipeline_results["advice"] = adv.get("messages", [AIMessage(content="")])[-1].content
 
-        payload = state.get("extracted_payload", {})
-        alerts = build_alerts(
-            forecast=payload.get("forecast"),
-            outliers=payload.get("outliers", []),
-            duplicates=payload.get("duplicates", []),
-        )
-        pipeline_results["alerts"] = alerts
-
-        logger.info(f"Post-ingestion pipeline complete | alerts={len(alerts)}")
+        logger.info(f"Post-ingestion pipeline complete | alerts={len(pipeline_results['alerts'])}")
 
     elapsed = time.time() - start
     logger.info(

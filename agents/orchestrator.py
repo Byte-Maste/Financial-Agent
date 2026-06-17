@@ -100,10 +100,14 @@ async def clarify_node(state: AgentState) -> dict:
 
 async def notify_node(state: AgentState) -> dict:
     payload = state.get("extracted_payload", {})
-    outliers = payload.get("outliers", [])
-    duplicates = payload.get("duplicates", [])
-    forecast = payload.get("forecast", {})
-    alerts = build_alerts(forecast, outliers, duplicates)
+    alerts = build_alerts(
+        forecast=payload.get("forecast"),
+        outliers=payload.get("outliers", []),
+        duplicates=payload.get("duplicates", []),
+        budget=payload.get("budget"),
+        analytics=payload.get("analytics"),
+        inactive_subscriptions=payload.get("inactive_subscriptions", []),
+    )
     logger.info(f"Notifications | user_id={state.get('user_id')} | alerts={len(alerts)}")
     return {
         "messages": [AIMessage(content=str(alerts) if alerts else "No alerts.")],
@@ -143,8 +147,10 @@ def build_graph() -> StateGraph:
         },
     )
 
-    for node in ["ingest", "categorize", "analyze", "anomaly", "budget", "forecast", "advise", "notify", "clarify"]:
+    for node in ["ingest", "categorize", "budget", "advise", "clarify"]:
         graph.add_edge(node, END)
+    for node in ["analyze", "anomaly", "forecast"]:
+        graph.add_edge(node, "notify")
 
     return graph
 

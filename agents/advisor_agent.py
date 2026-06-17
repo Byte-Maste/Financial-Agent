@@ -25,6 +25,7 @@ async def advisor_agent(state: AgentState) -> dict:
     duplicates = payload.get("duplicates", [])
     subscriptions = payload.get("subscriptions", [])
     inactive_subs = payload.get("inactive_subscriptions", [])
+    category_trends = payload.get("category_trends", [])
 
     context_parts = []
 
@@ -55,6 +56,12 @@ async def advisor_agent(state: AgentState) -> dict:
         context_parts.append(f"Inactive subscriptions: {', '.join(names)}.")
     elif subscriptions:
         context_parts.append(f"{len(subscriptions)} recurring subscriptions identified.")
+
+    if category_trends:
+        rising = [t for t in category_trends if t["trend"] == "increasing"]
+        if rising:
+            names = [f"{t['category']} (+{t['pct_change']:.0f}%)" for t in rising]
+            context_parts.append(f"Rising spending categories: {', '.join(names)}.")
 
     context = "\n".join(context_parts) if context_parts else "No financial data available yet."
     logger.info(f"Advisor generating | user_id={state.get('user_id')} | context_metrics={len(context_parts)}")
